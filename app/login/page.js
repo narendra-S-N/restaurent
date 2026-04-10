@@ -1,24 +1,23 @@
 "use client";
 
-import { useState } from "react";
-import { auth } from "../lib/firebase";
-import { signInWithEmailAndPassword } from "firebase/auth";
+import { signInWithPopup } from "firebase/auth";
+import { auth, provider } from "../lib/firebase";
 
 export default function Login() {
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
 
-  const login = async () => {
-    await signInWithEmailAndPassword(auth, email, password);
+  const handleLogin = async () => {
+    await signInWithPopup(auth, provider);
     alert("Logged in!");
   };
 
   return (
-    <div className="p-5">
-      <input placeholder="Email" onChange={(e)=>setEmail(e.target.value)} />
-      <input placeholder="Password" type="password" onChange={(e)=>setPassword(e.target.value)} />
-
-      <button onClick={login}>Login</button>
+    <div className="flex justify-center items-center h-screen">
+      <button
+        onClick={handleLogin}
+        className="bg-blue-500 text-white px-6 py-3"
+      >
+        Login with Google
+      </button>
     </div>
   );
 }

@@ -1,73 +1,58 @@
 "use client";
-import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
+
 import { useEffect, useState } from "react";
-import { db } from "../../lib/firebase";
-import { storage } from "../../lib/firebase"; // ✅ ADD THIS
+import { db, storage, auth } from "../../lib/firebase";
+import { useRouter, useParams } from "next/navigation";
 import {
   collection,
   addDoc,
-  getDocs,
   deleteDoc,
   doc,
   updateDoc,
   onSnapshot,
 } from "firebase/firestore";
-import { useParams } from "next/navigation";
+
+import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 
 export default function RestaurantPage() {
   const { id } = useParams();
+  const router = useRouter();
+
   const [category, setCategory] = useState("");
   const [item, setItem] = useState("");
   const [price, setPrice] = useState("");
   const [menu, setMenu] = useState([]);
-
-  //added image logic here
   const [image, setImage] = useState(null);
-
   const [editItem, setEditItem] = useState(null);
 
-  // 📌 Fetch menu items
-  const fetchMenu = async () => {
-    const snapshot = await getDocs(
-      collection(db, "restaurants", id, "menu")
+  // 🔐 Protect route
+  useEffect(() => {
+    if (!auth.currentUser) {
+      router.push("/login");
+    }
+  }, []);
+
+  // 🔥 Real-time menu fetch
+  useEffect(() => {
+    const unsubscribe = onSnapshot(
+      collection(db, "restaurants", id, "menu"),
+      (snapshot) => {
+        const data = snapshot.docs.map((doc) => ({
+          id: doc.id,
+          ...doc.data(),
+        }));
+        setMenu(data);
+      }
     );
 
-    const data = snapshot.docs.map((doc) => ({
-      id: doc.id,
-      ...doc.data(),
-    }));
+    return () => unsubscribe();
+  }, [id]);
 
-    setMenu(data);
-  };
-
-  // useEffect(() => {
-  //   fetchMenu();
-  // }, []);
-
-
-useEffect(() => {
-  const unsubscribe = onSnapshot(
-    collection(db, "restaurants", id, "menu"),
-    (snapshot) => {
-      const data = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      }));
-      setMenu(data);
-    }
-  );
-
-  return () => unsubscribe();
-}, []);
-
-  // ❌ Delete item
-  const deleteItem = async (itemId) => {
-    await deleteDoc(doc(db, "restaurants", id, "menu", itemId));
-    fetchMenu();
-  };
-
-
+  // ➕ Add item
   const addMenuItem = async () => {
+    const user = auth.currentUser;
+    if (!user) return;
+
     let imageUrl = "";
 
     if (image) {
@@ -76,22 +61,26 @@ useEffect(() => {
       imageUrl = await getDownloadURL(imageRef);
     }
 
-    // await addDoc(collection(db, "restaurants", id, "menu"), {
-    //   name: item,
-    //   price: Number(price),
-    //   image: imageUrl,
-    // });
     await addDoc(collection(db, "restaurants", id, "menu"), {
       name: item,
       price: Number(price),
       image: imageUrl,
+      ownerEmail: user.email,
       category: category,
     });
 
-    fetchMenu();
+    setItem("");
+    setPrice("");
+    setCategory("");
+    setImage(null);
   };
 
-  // ✏ Update item
+  // ❌ Delete
+  const deleteItem = async (itemId) => {
+    await deleteDoc(doc(db, "restaurants", id, "menu", itemId));
+  };
+
+  // ✏ Update
   const updateItem = async () => {
     await updateDoc(
       doc(db, "restaurants", id, "menu", editItem.id),
@@ -102,14 +91,15 @@ useEffect(() => {
     );
 
     setEditItem(null);
-    fetchMenu();
   };
 
   return (
     <div className="p-5">
       <h1 className="text-xl font-bold">Menu Management</h1>
+
+      {/* Category */}
       <select
-        className="border p-2"
+        className="border p-2 mt-2"
         value={category}
         onChange={(e) => setCategory(e.target.value)}
       >
@@ -118,7 +108,8 @@ useEffect(() => {
         <option value="non-veg">Non-Veg</option>
         <option value="drinks">Drinks</option>
       </select>
-      {/* ➕ Add Item */}
+
+      {/* Add Item */}
       <div className="mt-4">
         <input
           placeholder="Item Name"
@@ -133,11 +124,12 @@ useEffect(() => {
           value={price}
           onChange={(e) => setPrice(e.target.value)}
         />
+
         <input
           type="file"
           onChange={(e) => setImage(e.target.files[0])}
-          className="mt-2"
         />
+
         <button
           onClick={addMenuItem}
           className="bg-green-500 text-white px-4 py-2"
@@ -146,19 +138,22 @@ useEffect(() => {
         </button>
       </div>
 
-      {/* 📋 Menu List */}
+      {/* Menu List */}
       <div className="mt-6">
-        <h2 className="font-semibold">Menu Items</h2>
-
         {menu.map((m) => (
           <div
             key={m.id}
             className="border p-3 mt-2 flex justify-between"
           >
             <div>
-              {m.name} - ₹{m.price}
+              {/* <img
+                src={m.image}
+                className="w-16 h-16 object-cover"
+              /> */}
+              <p>{m.name} - ₹{m.price}</p>
+              <p>{m.category}</p>
             </div>
-            <p>{m.category}</p>
+
             <div>
               <button
                 onClick={() => setEditItem(m)}
@@ -178,14 +173,19 @@ useEffect(() => {
         ))}
       </div>
 
-      {/* 🧠 EDIT POPUP */}
+      {/* Edit Popup */}
       {editItem && (
-        <div className="fixed top-0 left-0 w-full h-full bg-black bg-opacity-50 flex items-center justify-center">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center">
           <div className="bg-white p-5 rounded">
-            <h2 className="text-lg font-bold mb-3">Edit Item</h2>
-            <img src={m.image} className="w-16 h-16 object-cover" />
+            <h2>Edit Item</h2>
+
+            {/* <img
+              src={editItem.image}
+              className="w-16 h-16 object-cover"
+            /> */}
+
             <input
-              className="border p-2 block mb-2"
+              className="border p-2 block mt-2"
               value={editItem.name}
               onChange={(e) =>
                 setEditItem({ ...editItem, name: e.target.value })
@@ -193,7 +193,7 @@ useEffect(() => {
             />
 
             <input
-              className="border p-2 block mb-2"
+              className="border p-2 block mt-2"
               value={editItem.price}
               onChange={(e) =>
                 setEditItem({ ...editItem, price: e.target.value })
@@ -202,14 +202,14 @@ useEffect(() => {
 
             <button
               onClick={updateItem}
-              className="bg-green-500 text-white px-3 py-1 mr-2"
+              className="bg-green-500 text-white px-3 py-1 mt-2"
             >
               Save
             </button>
 
             <button
               onClick={() => setEditItem(null)}
-              className="bg-gray-500 text-white px-3 py-1"
+              className="ml-2"
             >
               Cancel
             </button>
