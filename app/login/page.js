@@ -2,12 +2,22 @@
 
 import { signInWithPopup } from "firebase/auth";
 import { auth, provider } from "../lib/firebase";
+import { useRouter } from "next/navigation";
 
 export default function Login() {
+  const router = useRouter();
 
   const handleLogin = async () => {
-    await signInWithPopup(auth, provider);
-    alert("Logged in!");
+    try {
+      await signInWithPopup(auth, provider);
+
+      // ✅ redirect to home page
+      router.push("/");
+
+    } catch (error) {
+      console.error(error);
+      alert("Login failed");
+    }
   };
 
   return (
