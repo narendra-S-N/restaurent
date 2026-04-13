@@ -25,6 +25,12 @@ export default function RestaurantPage() {
   const [image, setImage] = useState(null);
   const [editItem, setEditItem] = useState(null);
 
+const [quantity, setQuantity] = useState("");
+const [discountType, setDiscountType] = useState("none");
+const [discountValue, setDiscountValue] = useState("");
+const [baseQuantity, setBaseQuantity] = useState("");
+const [unit, setUnit] = useState("");
+
   // 🔐 Protect route
   useEffect(() => {
     if (!auth.currentUser) {
@@ -61,20 +67,40 @@ export default function RestaurantPage() {
       imageUrl = await getDownloadURL(imageRef);
     }
 
-    await addDoc(collection(db, "restaurants", id, "menu"), {
-      name: item,
-      price: Number(price),
-      image: imageUrl,
-      ownerEmail: user.email,
-      category: category,
-    });
+await addDoc(collection(db, "restaurants", id, "menu"), {
+  name: item,
+  price: Number(price),
+  category: category, // ✅ ADD THIS
+
+  baseQuantity: Number(baseQuantity),
+  unit: unit,
+
+  discountType,
+  discountValue:
+    discountType === "none" ? 0 : Number(discountValue)
+});
 
     setItem("");
     setPrice("");
     setCategory("");
     setImage(null);
+      setDiscountType("none");
+      setBaseQuantity("");
+      setUnit("");
+
   };
 
+const getFinalPrice = (item) => {
+  if (item.discountType === "none") return item.price;
+
+  if (item.discountType === "percent") {
+    return item.price - (item.price * item.discountValue) / 100;
+  }
+
+  if (item.discountType === "flat") {
+    return item.price - item.discountValue;
+  }
+};
   // ❌ Delete
   const deleteItem = async (itemId) => {
     await deleteDoc(doc(db, "restaurants", id, "menu", itemId));
@@ -82,14 +108,20 @@ export default function RestaurantPage() {
 
   // ✏ Update
   const updateItem = async () => {
-    await updateDoc(
-      doc(db, "restaurants", id, "menu", editItem.id),
-      {
-        name: editItem.name,
-        price: Number(editItem.price),
-      }
-    );
+await updateDoc(doc(db, "restaurants", id, "menu", editItem.id), {
+  name: editItem.name,
+  price: Number(editItem.price),
+  category: editItem.category,
 
+  baseQuantity: Number(editItem.baseQuantity),
+  unit: editItem.unit,
+
+  discountType: editItem.discountType,
+  discountValue:
+    editItem.discountType === "none"
+      ? 0
+      : Number(editItem.discountValue)
+}); 
     setEditItem(null);
   };
 
@@ -125,6 +157,40 @@ export default function RestaurantPage() {
           onChange={(e) => setPrice(e.target.value)}
         />
 
+<select
+  className="border p-2 block mt-2"
+  value={discountType}
+  onChange={(e) => setDiscountType(e.target.value)}
+>
+  <option value="none">No Discount</option>
+  <option value="percent">Percentage (%)</option>
+  <option value="flat">Flat Amount (₹)</option>
+</select>
+
+{/* 👇 Show only if discount is selected */}
+{discountType !== "none" && (
+  <input
+    placeholder="Discount Value"
+    className="border p-2 block mt-2"
+    value={discountValue}
+    onChange={(e) => setDiscountValue(e.target.value)}
+  />
+)}
+
+<input
+  placeholder="Quantity Number (e.g. 6)"
+  className="border p-2 block mt-2"
+  value={baseQuantity}
+  onChange={(e) => setBaseQuantity(e.target.value)}
+/>
+
+<input
+  placeholder="Unit (e.g. pieces, plate, ml)"
+  className="border p-2 block mt-2"
+  value={unit}
+  onChange={(e) => setUnit(e.target.value)}
+/>
+
         <input
           type="file"
           onChange={(e) => setImage(e.target.files[0])}
@@ -140,37 +206,76 @@ export default function RestaurantPage() {
 
       {/* Menu List */}
       <div className="mt-6">
-        {menu.map((m) => (
-          <div
-            key={m.id}
-            className="border p-3 mt-2 flex justify-between"
-          >
-            <div>
-              {/* <img
-                src={m.image}
-                className="w-16 h-16 object-cover"
-              /> */}
-              <p>{m.name} - ₹{m.price}</p>
-              <p>{m.category}</p>
-            </div>
+       {menu.map((m) => (
+  <div
+    key={m.id}
+    className="border p-4 mt-3 rounded-lg flex justify-between items-center shadow-sm"
+  >
+    {/* LEFT SIDE */}
+    <div className="flex items-center gap-4">
 
-            <div>
-              <button
-                onClick={() => setEditItem(m)}
-                className="bg-blue-500 text-white px-2 py-1 mr-2"
-              >
-                Edit
-              </button>
+      {/* IMAGE */}
+      {m.image && (
+        <img
+          src={m.image}
+          className="w-16 h-16 object-cover rounded"
+        />
+      )}
 
-              <button
-                onClick={() => deleteItem(m.id)}
-                className="bg-red-500 text-white px-2 py-1"
-              >
-                Delete
-              </button>
-            </div>
-          </div>
-        ))}
+      <div>
+        {/* CATEGORY */}
+        <p className="text-sm text-gray-500">
+          {m.category || "No Category"}
+        </p>
+
+        {/* NAME */}
+        <h2 className="font-semibold text-lg">{m.name}</h2>
+
+        {/* QUANTITY */}
+        <p className="text-sm text-gray-600">
+          {m.baseQuantity || 0} {m.unit || ""}
+        </p>
+
+        {/* PRICE */}
+        <p className="text-md font-medium">
+          ₹{getFinalPrice(m)}
+
+          {m.discountType !== "none" && (
+            <span className="line-through text-gray-400 ml-2 text-sm">
+              ₹{m.price}
+            </span>
+          )}
+        </p>
+
+        {/* DISCOUNT */}
+        {m.discountType !== "none" && (
+          <p className="text-green-600 text-sm">
+            {m.discountType === "percent"
+              ? `${m.discountValue}% OFF`
+              : `₹${m.discountValue} OFF`}
+          </p>
+        )}
+      </div>
+    </div>
+
+    {/* RIGHT SIDE BUTTONS */}
+    <div className="flex flex-col gap-2">
+      <button
+        onClick={() => setEditItem(m)}
+        className="bg-blue-500 text-white px-3 py-1 rounded"
+      >
+        Edit
+      </button>
+
+      <button
+        onClick={() => deleteItem(m.id)}
+        className="bg-red-500 text-white px-3 py-1 rounded"
+      >
+        Delete
+      </button>
+    </div>
+  </div>
+))}
       </div>
 
       {/* Edit Popup */}
@@ -199,6 +304,49 @@ export default function RestaurantPage() {
                 setEditItem({ ...editItem, price: e.target.value })
               }
             />
+
+            <input
+  value={editItem.category || ""}
+  onChange={(e) =>
+    setEditItem({ ...editItem, category: e.target.value })
+  }
+/>
+
+<input
+  value={editItem.baseQuantity || ""}
+  onChange={(e) =>
+    setEditItem({ ...editItem, baseQuantity: e.target.value })
+  }
+/>
+
+<input
+  value={editItem.unit || ""}
+  onChange={(e) =>
+    setEditItem({ ...editItem, unit: e.target.value })
+  }
+/>
+<select
+  value={editItem.discountType}
+  onChange={(e) =>
+    setEditItem({ ...editItem, discountType: e.target.value })
+  }
+>
+  <option value="none">No Discount</option>
+  <option value="percent">%</option>
+  <option value="flat">₹</option>
+</select>
+
+{editItem.discountType !== "none" && (
+  <input
+    value={editItem.discountValue}
+    onChange={(e) =>
+      setEditItem({
+        ...editItem,
+        discountValue: e.target.value
+      })
+    }
+  />
+)}
 
             <button
               onClick={updateItem}
